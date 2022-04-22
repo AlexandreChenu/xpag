@@ -18,7 +18,7 @@ class HER(Sampler):
         super().__init__()
         self.datatype = datatype
         self.replay_strategy = replay_strategy
-        self.replay_k = 4.0
+        self.replay_k = 2.0
         if self.replay_strategy == "future":
             self.future_p = 1 - (1.0 / (1 + self.replay_k))
         else:
@@ -62,7 +62,14 @@ class HER(Sampler):
         future_ag = buffers["next_observation.achieved_goal"][
             episode_idxs[her_indexes], future_t
         ]
+
+        obs_dg = transitions["observation.desired_goal"].copy()
+
         transitions["observation.desired_goal"][her_indexes] = future_ag
+
+        dist_future_ag_to_true_dg = np.linalg.norm(transitions["observation.desired_goal"] - obs_dg, axis=-1)
+        is_close_to_true_dg = np.where(dist_future_ag_to_true_dg<=0.05, 1, 0)
+
         # recomputing rewards
         if self.datatype == DataType.TORCH_CPU or self.datatype == DataType.TORCH_CUDA:
             transitions["reward"] = torch.unsqueeze(
@@ -115,12 +122,25 @@ class HER(Sampler):
                 axis=1,
             )
 
-        # TODO: transfer the 'is_success' property to relabelled transitions?
-        # add done to transitions relabelled as successful
-        # diff_reward_done = transitions["done"] - transitions["reward"] / 1.
-        # missing_dones = (diff_reward_done < 0)  # .int()
-        # transitions["done"] = transitions["done"] + missing_dones
-        # assert (transitions["done"][:] <= 1).all()
-        # assert (transitions["done"][:] >= 0).all()
+
+
+        #is_not_relabelled = np.ones(transitions["done"].shape)
+        #is_not_relabelled[her_indexes] = 0.
+        #is_not_relabelled = is_not_relabelled + is_close_to_true_dg
+        transitions["is_not_relabelled"] = is_close_to_true_dg.reshape(transitions["done"].shape)
+
+        ## add done to transitions relabelled as successful
+        diff_reward_done = transitions["done"] - transitions["reward"]/1.
+        missing_dones = (diff_reward_done < 0)#.int()
+        transitions["done"] = transitions["done"] + missing_dones
+        assert (transitions["done"][:] <= 1).all()
+        assert (transitions["done"][:] >= 0).all()
+
+        ## remove truncation signal to transitions relabelled as successful -> we want the mask to be zero in that case
+        sum_truncation_reward = transitions["truncation"] + transitions["reward"]/1.
+        remove_truncation = (sum_truncation_reward == 2) ## truncation true and R = 1
+        transitions["truncation"] = transitions["truncation"] - remove_truncation
+        assert (transitions["truncation"][:] <= 1).all()
+        assert (transitions["truncation"][:] >= 0).all()
 
         return transitions

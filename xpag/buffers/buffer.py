@@ -89,8 +89,11 @@ class DefaultEpisodicBuffer(EpisodicBuffer):
     def init_buffer(self, step: Dict[str, Any]):
         self.dict_sizes = {}
         self.keys = list(step.keys())
+        # print("self.keys = ", self.keys)
         assert "done" in self.keys
         for key in self.keys:
+            # print("key = ", key)
+            # print("step[key] = ", step[key])
             if isinstance(step[key], dict):
                 for k in step[key]:
                     assert len(step[key][k].shape) == 2
@@ -127,6 +130,10 @@ class DefaultEpisodicBuffer(EpisodicBuffer):
         if not self.first_insert_done:
             self.init_buffer(step)
         for key in self.keys:
+            # print("key = ", key)
+            # print("step[key] = ", step[key])
+            # if key == "observation":
+            #     print("step[key]['achieved_goal'] = ", step[key]['achieved_goal'])
             if isinstance(step[key], dict):
                 for k in step[key]:
                     self.buffers[key + "." + k][

@@ -8,25 +8,6 @@ import os
 from xpag.agents.agent import Agent
 from xpag.agents.sac.sac_from_jaxrl import Batch, SACLearner
 from xpag.tools.utils import squeeze
-import functools
-from typing import Callable, Any, Tuple
-import flax
-import jax
-import jax.numpy as jnp
-
-
-@functools.partial(jax.jit, static_argnames="critic_apply_fn")
-def _qvalue(
-    critic_apply_fn: Callable[..., Any],
-    critic_params: flax.core.FrozenDict[str, Any],
-    observations: np.ndarray,
-    actions: np.ndarray,
-) -> Tuple[jnp.ndarray]:
-    return jnp.minimum(
-        *critic_apply_fn({"params": critic_params}, observations, actions)
-    )
-    # c1, _ = critic_apply_fn({"params": critic_params}, observations, actions)
-    # return c1
 
 
 class SAC(Agent, ABC):
@@ -44,12 +25,13 @@ class SAC(Agent, ABC):
             start_seed = 42
 
         self.jaxrl_params = {
-            "actor_lr": 0.0003,
-            "backup_entropy": True,
-            "critic_lr": 0.0003,
+            "actor_lr": 0.001,
+            "backup_entropy": False,
+            "critic_lr": 0.001,
             "discount": 0.99,
-            "hidden_dims": (256, 256),
-            "init_temperature": 1.0,
+            # "hidden_dims": (512, 512, 512),
+            "hidden_dims": (400,300),
+            "init_temperature": 0.001,
             "target_entropy": None,
             "target_update_period": 1,
             "tau": 0.005,
@@ -67,17 +49,10 @@ class SAC(Agent, ABC):
             **self.jaxrl_params
         )
 
-    def value(self, observation, action):
-        return np.asarray(
-            _qvalue(
-                self.sac.critic.apply_fn, self.sac.critic.params, observation, action
-            )
-        )
-
-    def select_action(self, observation, eval_mode=False):
+    def select_action(self, observation, deterministic=True):
         # return self.sac.sample_actions(observation)
         return self.sac.sample_actions(
-            observation, distribution="det" if eval_mode else "log_prob"
+            observation, distribution="det" if deterministic else "log_prob"
         )
 
     def train_on_batch(self, batch):

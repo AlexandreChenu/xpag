@@ -378,9 +378,9 @@ class TD3(Agent, ABC):
                 self.training_state.q_params,
             )
 
-    def select_action(self, observation, eval_mode=False):
+    def select_action(self, observation, deterministic=True):
         self.key, key_sample = jax.random.split(self.key)
-        if eval_mode:
+        if deterministic:
             apply_func = self.select_action_deterministic
         else:
             apply_func = self.select_action_probabilistic

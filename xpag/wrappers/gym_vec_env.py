@@ -8,10 +8,18 @@ import numpy as np
 import gym
 from gym.vector.utils import (
     write_to_shared_memory,
+    concatenate
 )
 from gym.vector import VectorEnv, AsyncVectorEnv
+from xpag.wrappers.reset_done_sync_vector_env import SyncVectorEnv
 from xpag.wrappers.reset_done import ResetDoneWrapper
 from xpag.tools.utils import get_env_dimensions
+
+from gym import envs
+
+from collections import OrderedDict
+
+import gym_gfetch
 
 
 def check_goalenv(env) -> bool:
@@ -65,17 +73,34 @@ def gym_vec_env_(env_name, num_envs):
         env_type = "Gym"
     else:
         dummy_env = gym.make(env_name)
+
+        #print("dummy_env = ", dummy_env)
+        # print("dummy_env.spec = ", dummy_env.spec)
         # We force the env to have a standard gym time limit:
         assert (
             hasattr(dummy_env.spec, "max_episode_steps")
             and dummy_env.spec.max_episode_steps is not None
         ), "Only allowing gym envs with time limit (spec.max_episode_steps)."
+        # env = ResetDoneVecWrapper(
+        #     AsyncVectorEnv(
+        #         [lambda: ResetDoneWrapper(gym.make(env_name))] * num_envs,
+        #         worker=_worker_shared_memory_no_auto_reset,
+        #     )
+        # )
+
         env = ResetDoneVecWrapper(
-            AsyncVectorEnv(
-                [lambda: ResetDoneWrapper(gym.make(env_name))] * num_envs,
-                worker=_worker_shared_memory_no_auto_reset,
+            SyncVectorEnv(
+                [lambda: ResetDoneWrapper(gym.make(env_name))] * num_envs
             )
         )
+
+        # env = ResetDoneVecWrapper(
+        #     AsyncVectorEnv(
+        #         [lambda: gym.make(env_name)] * num_envs,
+        #         worker=_worker_shared_memory_no_auto_reset,
+        #     )
+        # )
+
         env._spec = dummy_env.spec
         max_episode_steps = dummy_env.spec.max_episode_steps
         # env_type = "Mujoco" if isinstance(dummy_env.unwrapped, MujocoEnv) else "Gym"
@@ -111,6 +136,35 @@ def gym_vec_env(env_name, num_envs):
     return env, eval_env, env_info
 
 
+# class ResetDoneVecWrapper(gym.Wrapper):
+#     def __init__(self, env: VectorEnv):
+#         super().__init__(env)
+#
+#     def reset(self, **kwargs):
+#         return self.env.reset(**kwargs)
+#
+#     def reset_done(self, **kwargs):
+#         return np.array(self.env.call("reset_done", **kwargs))
+#
+#     def step(self, action):
+#         obs, reward, done, info_ = self.env.step(action)
+#         info = {
+#             "info_tuple": info_,
+#             "truncation": np.array(
+#                 [
+#                     [elt["TimeLimit.truncated"] if "TimeLimit.truncated" in elt else 0]
+#                     for elt in info_
+#                 ]
+#             ).reshape((self.env.num_envs, -1)),
+#         }
+#
+#         return (
+#             obs.reshape((self.env.num_envs, -1)),
+#             reward.reshape((self.env.num_envs, -1)),
+#             done.reshape((self.env.num_envs, -1)),
+#             info,
+#         )
+
 class ResetDoneVecWrapper(gym.Wrapper):
     def __init__(self, env: VectorEnv):
         super().__init__(env)
@@ -118,28 +172,35 @@ class ResetDoneVecWrapper(gym.Wrapper):
     def reset(self, **kwargs):
         return self.env.reset(**kwargs)
 
+    ## Note (Alex): pass result through concatenate function to obtain a OrderedDict as output
     def reset_done(self, **kwargs):
-        return np.array(self.env.call("reset_done", **kwargs))
+        results = self.env.call("reset_done", **kwargs)
+        observations = concatenate(
+                    self.env.single_observation_space, results, self.env.observations
+                )
+        return observations
+
+    # def reset_done(self, **kwargs):
+    #     return self.env.reset_done(**kwargs)
 
     def step(self, action):
-        obs, reward, done, info_ = self.env.step(action)
-        info = {
-            "info_tuple": info_,
-            "truncation": np.array(
-                [
-                    [elt["TimeLimit.truncated"] if "TimeLimit.truncated" in elt else 0]
-                    for elt in info_
-                ]
-            ).reshape((self.env.num_envs, -1)),
-        }
+        obs, reward, done, info = self.env.step(action)
+        # info = {
+        #     "info_tuple": info_,
+        #     "truncation": np.array(
+        #         [
+        #             [elt["TimeLimit.truncated"] if "TimeLimit.truncated" in elt else 0]
+        #             for elt in info_
+        #         ]
+        #     ).reshape((self.env.num_envs, -1)),
+        # }
 
         return (
-            obs.reshape((self.env.num_envs, -1)),
-            reward.reshape((self.env.num_envs, -1)),
-            done.reshape((self.env.num_envs, -1)),
+            obs,
+            reward,
+            done,
             info,
         )
-
 
 def _worker_shared_memory_no_auto_reset(
     index, env_fn, pipe, parent_pipe, shared_memory, error_queue
@@ -168,6 +229,8 @@ def _worker_shared_memory_no_auto_reset(
                         observation_space, index, observation, shared_memory
                     )
                     pipe.send((None, True))
+
+
             elif command == "step":
                 observation, reward, done, info = env.step(data)
                 # NO AUTOMATIC RESET

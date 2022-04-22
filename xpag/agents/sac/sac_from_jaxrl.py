@@ -53,8 +53,7 @@ import numpy as np
 from tensorflow_probability.substrates import jax as tfp
 
 
-# def default_init(scale: Optional[float] = jnp.sqrt(0.2)):
-def default_init(scale: Optional[float] = jnp.sqrt(2)):
+def default_init(scale: Optional[float] = jnp.sqrt(0.02)):
     return nn.initializers.orthogonal(scale)
 
 
@@ -338,7 +337,7 @@ class Dataset(object):
         for traj in trajs:
             mc_return = 0.0
             for i, (_, _, reward, _, _, _) in enumerate(traj):
-                mc_return += reward * (discount**i)
+                mc_return += reward * (discount ** i)
             mc_returns.append(mc_return)
 
         return np.asarray(mc_returns)
@@ -507,8 +506,8 @@ def update_critic(
 
     target_q = batch.rewards + discount * batch.masks * next_q
 
-    if backup_entropy:
-        target_q -= discount * batch.masks * temp() * next_log_probs
+    #if backup_entropy:
+        #target_q -= discount * batch.masks * temp() * next_log_probs
 
     def critic_loss_fn(critic_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         q1, q2 = critic.apply_fn(
@@ -516,6 +515,12 @@ def update_critic(
         )
         critic_loss = ((q1 - target_q) ** 2 + (q2 - target_q) ** 2).mean()
         return critic_loss, {
+            "masks": batch.masks[:5],
+            "rewards":batch.rewards[:5],
+            "temp": temp(),
+            "ent_bonus": (temp() * next_log_probs)[:5],
+            "target_q": target_q[:5],
+            "next_q": next_q[:5],
             "critic_loss": critic_loss,
             "q1": q1.mean(),
             "q2": q2.mean(),
@@ -770,9 +775,12 @@ def _update_jit(
 
     rng, key = jax.random.split(rng)
     new_actor, actor_info = update_actor(key, actor, new_critic, temp, batch)
-    new_temp, alpha_info = update_temperature(
-        temp, actor_info["entropy"], target_entropy
-    )
+    # new_temp, alpha_info = update_temperature(
+    #     temp, actor_info["entropy"], target_entropy
+    # )
+
+    new_temp = temp
+    alpha_info = {}
 
     return (
         rng,
