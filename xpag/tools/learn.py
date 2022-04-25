@@ -29,7 +29,7 @@ def learn(
 ):
     eval_log_reset()
     timing_reset()
-    observation = goalsetter.reset(env, env.reset())
+    observation = goalsetter.reset(env.reset())
 
     for i in range(max_steps // env_info["num_envs"]):
         if not i % max(evaluate_every_x_steps // env_info["num_envs"], 1):
@@ -38,7 +38,6 @@ def learn(
                 eval_env,
                 env_info,
                 agent,
-                goalsetter,
                 save_dir=save_dir,
                 plot_projection=plot_projection,
                 save_episode=save_episode,
@@ -55,14 +54,12 @@ def learn(
                 observation
                 if not env_info["is_goalenv"]
                 else hstack(observation["observation"], observation["desired_goal"]),
-                eval_mode=False,
+                deterministic=False,
             )
             for _ in range(max(round(gd_steps_per_step * env_info["num_envs"]), 1)):
                 _ = agent.train_on_batch(buffer.sample(batch_size))
 
-        next_observation, reward, done, info = goalsetter.step(
-            env, observation, action, *env.step(action)
-        )
+        next_observation, reward, done, info = goalsetter.step(*env.step(action))
 
         step = {
             "observation": observation,
@@ -81,4 +78,4 @@ def learn(
             # use store_done() if the buffer is an episodic buffer
             if hasattr(buffer, "store_done"):
                 buffer.store_done()
-            observation = goalsetter.reset_done(env, env.reset_done())
+            observation = goalsetter.reset_done(env.reset_done())
