@@ -7,6 +7,8 @@ import torch
 from xpag.tools.utils import DataType
 from xpag.samplers.sampler import Sampler
 
+# class MyHER(HER):
+#     ## TODO: package hors XPAG
 
 class HER(Sampler):
     def __init__(
@@ -64,9 +66,7 @@ class HER(Sampler):
         ]
 
         obs_dg = transitions["observation.desired_goal"].copy()
-
         transitions["observation.desired_goal"][her_indexes] = future_ag
-
         dist_future_ag_to_true_dg = np.linalg.norm(transitions["observation.desired_goal"] - obs_dg, axis=-1)
         is_close_to_true_dg = np.where(dist_future_ag_to_true_dg<=0.05, 1, 0)
 
@@ -132,15 +132,15 @@ class HER(Sampler):
         ## add done to transitions relabelled as successful
         diff_reward_done = transitions["done"] - transitions["reward"]/1.
         missing_dones = (diff_reward_done < 0)#.int()
-        transitions["done"] = transitions["done"] + missing_dones
-        assert (transitions["done"][:] <= 1).all()
-        assert (transitions["done"][:] >= 0).all()
+        transitions["true_done"] = transitions["done"].copy() + missing_dones
+        assert (transitions["true_done"][:] <= 1).all()
+        assert (transitions["true_done"][:] >= 0).all()
 
         ## remove truncation signal to transitions relabelled as successful -> we want the mask to be zero in that case
         sum_truncation_reward = transitions["truncation"] + transitions["reward"]/1.
         remove_truncation = (sum_truncation_reward == 2) ## truncation true and R = 1
-        transitions["truncation"] = transitions["truncation"] - remove_truncation
-        assert (transitions["truncation"][:] <= 1).all()
-        assert (transitions["truncation"][:] >= 0).all()
+        transitions["true_truncation"] = transitions["truncation"].copy() - remove_truncation
+        assert (transitions["true_truncation"][:] <= 1).all()
+        assert (transitions["true_truncation"][:] >= 0).all()
 
         return transitions

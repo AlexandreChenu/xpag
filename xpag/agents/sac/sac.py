@@ -60,7 +60,7 @@ class SAC(Agent, ABC):
             observations=batch["observation"],
             actions=batch["action"],
             rewards=squeeze(batch["reward"]),
-            masks=squeeze(1 - batch["done"] * (1 - batch["truncation"])),
+            masks=squeeze(1 - batch["true_done"] * (1 - batch["true_truncation"])),
             next_observations=batch["next_observation"],
         )
 
