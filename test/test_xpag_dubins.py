@@ -1,7 +1,15 @@
 #!/usr/bin python -w
 
 import os
+
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.5"
+
 import jax
+
+#jax.config.update('jax_platform_name', "cpu")
+
+
 import flax
 
 import xpag
@@ -23,7 +31,7 @@ import numpy as np
 
 import gym_gmazes
 
-num_envs = 6  # the number of rollouts in parallel during training
+num_envs = 5  # the number of rollouts in parallel during training
 env, eval_env, env_info = gym_vec_env('GMazeDCILDubins-v0', num_envs)
 
 def plot_traj(traj, traj_eval, save_dir, it=0):
@@ -155,11 +163,11 @@ start_training_after_x_steps = env_info['max_episode_steps'] * 50
 max_steps = 100_000
 evaluate_every_x_steps = 5_000
 save_agent_every_x_steps = 100_000
-save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'train_mujoco')
+save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'multi_env_no_bonus_fix_HER')
 save_episode = True
 plot_projection = None
 
-agent = SAC_bonus(
+agent = SAC(
     env_info['observation_dim'] if not env_info['is_goalenv']
     else env_info['observation_dim'] + env_info['desired_goal_dim'],
     env_info['action_dim'],
