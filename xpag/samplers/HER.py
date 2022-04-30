@@ -139,7 +139,7 @@ class HER(Sampler):
         ## remove truncation signal to transitions relabelled as successful -> we want the mask to be zero in that case
         sum_truncation_reward = transitions["truncation"] + transitions["reward"]/1.
         remove_truncation = (sum_truncation_reward == 2) ## truncation true and R = 1
-        transitions["true_truncation"] = transitions["truncation"].copy() - remove_truncation
+        transitions["true_truncation"] = transitions["truncation"]*0 #transitions["truncation"].copy() - remove_truncation
         assert (transitions["true_truncation"][:] <= 1).all()
         assert (transitions["true_truncation"][:] >= 0).all()
 
