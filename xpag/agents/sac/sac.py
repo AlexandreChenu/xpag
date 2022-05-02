@@ -31,7 +31,7 @@ class SAC(Agent, ABC):
             "discount": 0.99,
             # "hidden_dims": (512, 512, 512),
             "hidden_dims": (400,300),
-            "init_temperature": 0.002,
+            "init_temperature": 0.1,
             "target_entropy": None,
             "target_update_period": 1,
             "tau": 0.005,

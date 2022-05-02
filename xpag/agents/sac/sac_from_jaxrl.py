@@ -53,7 +53,7 @@ import numpy as np
 from tensorflow_probability.substrates import jax as tfp
 
 
-def default_init(scale: Optional[float] = jnp.sqrt(0.001)):
+def default_init(scale: Optional[float] = jnp.sqrt(0.02)):
     return nn.initializers.orthogonal(scale)
 
 
