@@ -11,6 +11,7 @@ print(jax.lib.xla_bridge.get_backend().platform)
 
 #jax.config.update('jax_platform_name', "cpu")
 
+from datetime import datetime
 
 import flax
 
@@ -159,15 +160,20 @@ def eval_traj(eval_env, agent):
         observation = eval_env.shift_goal()
     return traj
 
+now = datetime.now()
+dt_string = '%s_%s' % (datetime.now().strftime('%Y%m%d'), str(os.getpid()))
+
 batch_size = 256
 gd_steps_per_step = 1.5
 start_training_after_x_steps = env_info['max_episode_steps'] * 50
 max_steps = 100_000
 evaluate_every_x_steps = 5_000
 save_agent_every_x_steps = 100_000
-save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'single_env_no_bonus_overshoot_uniform_skill_selection')
+save_dir = os.path.join('/gpfswork/rech/kcr/ubj56je', 'results', 'xpag', 'DCIL_no_bonus_overshoot', dt_string)
 save_episode = True
 plot_projection = None
+
+os.mkdir(save_dir)
 
 agent = SAC(
     env_info['observation_dim'] if not env_info['is_goalenv']
@@ -188,6 +194,9 @@ timing_reset()
 observation = env.reset()
 traj = []
 info_train = None
+num_success = 0
+num_rollouts = 0
+f_ratio = open(save_dir + "/ratio.txt", "w")
 
 for i in range(max_steps // env_info["num_envs"]):
     traj.append(observation["observation"])
@@ -211,6 +220,12 @@ for i in range(max_steps // env_info["num_envs"]):
         if info_train is not None:
             print("rewards = ", max(info_train["rewards"]))
 
+        if num_rollouts > 0:
+            print("ratio = ", float(num_success/num_rollouts))
+            f_ratio.write(str(float(num_success/num_rollouts)) + "\n")
+            num_success = 0
+            num_rollouts = 0
+        
     if not i % max(save_agent_every_x_steps // env_info["num_envs"], 1):
         if save_dir is not None:
             agent.save(os.path.join(save_dir, "agent"))
@@ -292,7 +307,12 @@ for i in range(max_steps // env_info["num_envs"]):
     observation = next_observation
 
     if done.max():
+        num_rollouts += 1
+        if info["is_success"].max() == 1:
+            num_success += 1
         # use store_done() if the buffer is an episodic buffer
         if hasattr(buffer, "store_done"):
             buffer.store_done()
         observation = env.reset_done()
+
+f_ratio.close()
