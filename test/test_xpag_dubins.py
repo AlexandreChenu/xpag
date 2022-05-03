@@ -7,6 +7,8 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.5"
 
 import jax
 
+print(jax.lib.xla_bridge.get_backend().platform)
+
 #jax.config.update('jax_platform_name', "cpu")
 
 
@@ -163,7 +165,7 @@ start_training_after_x_steps = env_info['max_episode_steps'] * 50
 max_steps = 100_000
 evaluate_every_x_steps = 5_000
 save_agent_every_x_steps = 100_000
-save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'single_env_no_bonus_fix_HER')
+save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'single_env_no_bonus_overshoot_uniform_skill_selection')
 save_episode = True
 plot_projection = None
 
@@ -241,17 +243,17 @@ for i in range(max_steps // env_info["num_envs"]):
             # print("target_q = ", info_train["target_q"].max())
             # print("q1 = ", info_train["q1"].max())
             # print("q2 = ", info_train["q2"].max())
-            if (abs(info_train["target_q"].max()) > 1.2) or (abs(info_train["q1"].max()) > 1.2) or (abs(info_train["q2"].max()) > 1.2):
-                print("\n error: excessive target value")
-                print("next_q = ", info_train["next_q"])
-                print("q1 = ", info_train["q1"])
-                print("q2 = ", info_train["q2"])
-                print("target_q = ", info_train["target_q"])
-                print("reg_target_q = ", info_train["reg_target_q"])
-                print("rewards = ", info_train["rewards"])
-                print("masks = ", info_train["masks"])
-                print("done = ", transitions["true_done"][:5])
-                print("truncation = ", transitions["true_truncation"][:5])
+            #if (abs(info_train["target_q"].max()) > 1.2) or (abs(info_train["q1"].max()) > 1.2) or (abs(info_train["q2"].max()) > 1.2):
+                #print("\n error: excessive target value")
+                #print("next_q = ", info_train["next_q"])
+                #print("q1 = ", info_train["q1"])
+                #print("q2 = ", info_train["q2"])
+                #print("target_q = ", info_train["target_q"])
+                #print("reg_target_q = ", info_train["reg_target_q"])
+                #print("rewards = ", info_train["rewards"])
+                #print("masks = ", info_train["masks"])
+                #print("done = ", transitions["true_done"][:5])
+                #print("truncation = ", transitions["true_truncation"][:5])
             #print("\nis_success = ", info_train["is_success"])
             #print("is_not_relabelled = ", info_train["is_not_relabelled"])
             #print("next_goal_avail = ", info_train["next_goal_avail"])

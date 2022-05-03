@@ -130,14 +130,14 @@ class HER(Sampler):
         transitions["is_not_relabelled"] = is_close_to_true_dg.reshape(transitions["done"].shape)
 
         ## add done to transitions relabelled as successful
-        diff_reward_done = transitions["done"] - transitions["reward"]/1.
+        diff_reward_done = transitions["done"] - transitions["reward"]
         missing_dones = (diff_reward_done < 0)#.int()
         transitions["true_done"] = transitions["done"].copy() + missing_dones
         assert (transitions["true_done"][:] <= 1).all()
         assert (transitions["true_done"][:] >= 0).all()
 
         ## remove truncation signal to transitions relabelled as successful -> we want the mask to be zero in that case
-        sum_truncation_reward = transitions["truncation"] + transitions["reward"]/1.
+        sum_truncation_reward = transitions["truncation"] + transitions["reward"]
         remove_truncation = (sum_truncation_reward == 2) ## truncation true and R = 1
         transitions["true_truncation"] = transitions["truncation"]*0 #transitions["truncation"].copy() - remove_truncation
         assert (transitions["true_truncation"][:] <= 1).all()

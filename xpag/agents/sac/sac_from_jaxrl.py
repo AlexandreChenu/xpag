@@ -578,7 +578,7 @@ class DoubleCritic(nn.Module):
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
-LOG_STD_MIN = -10.0
+LOG_STD_MIN = -20.0
 LOG_STD_MAX = 2.0
 
 
