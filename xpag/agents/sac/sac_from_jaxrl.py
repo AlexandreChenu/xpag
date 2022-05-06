@@ -506,10 +506,10 @@ def update_critic(
 
     target_q = batch.rewards + discount * batch.masks * next_q
 
-    fake_q = target_q.copy() #jnp.zeros(target_q.shape)  ## regularization 
-    
-    reg_target_q = jnp.where(target_q<0.,fake_q, target_q)
-    
+    # fake_q = target_q.copy() #jnp.zeros(target_q.shape)  ## regularization
+    #
+    # reg_target_q = jnp.where(target_q<0.,fake_q, target_q)
+
     #if backup_entropy:
         #target_q -= discount * batch.masks * temp() * next_log_probs
 
@@ -524,7 +524,7 @@ def update_critic(
             "temp": temp(),
             "ent_bonus": (temp() * next_log_probs)[:5],
             "target_q": target_q[:5],
-            "reg_target_q": reg_target_q[:5],
+            # "reg_target_q": reg_target_q[:5],
             "next_q": next_q[:5],
             "critic_loss": critic_loss,
             "q1": q1[:5],

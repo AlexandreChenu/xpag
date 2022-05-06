@@ -16,7 +16,7 @@ class ResetDoneWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
         # we assume the reset returns only an obs, no info (return_info=False)
-        obs = self.env.unwrapped.reset(**kwargs)
+        obs = self.env.reset(**kwargs)
         self._last_done = False
         self._last_obs = obs
         self.steps = 0
@@ -26,14 +26,14 @@ class ResetDoneWrapper(gym.Wrapper):
         if self._last_done:
             # we assume the reset returns only an obs, no info (return_info=False)
             # obs = self.env.reset(**kwargs)
-            obs = self.env.unwrapped.reset_done(**kwargs) ## Note (Alex): change for reset_done
+            obs = self.env.reset_done(**kwargs) ## Note (Alex): change for reset_done
             self._last_done = False
             self._last_obs = obs
             self.steps = 0
         return self._last_obs
 
     def step(self, action):
-        obs, reward, done, info = self.env.unwrapped.step(action)
+        obs, reward, done, info = self.env.step(action)
         # print("self.env = ", self.env.unwrapped)
         # print("done reset done = ", done)
         if done:

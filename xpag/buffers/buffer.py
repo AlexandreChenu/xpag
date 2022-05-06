@@ -131,7 +131,7 @@ class DefaultEpisodicBuffer(EpisodicBuffer):
             self.init_buffer(step)
         for key in self.keys:
             # print("key = ", key)
-            # print("step[key] = ", step[key])
+            #print("step[key] = ", step[key])
             # if key == "observation":
             #     print("step[key]['achieved_goal'] = ", step[key]['achieved_goal'])
             if isinstance(step[key], dict):
