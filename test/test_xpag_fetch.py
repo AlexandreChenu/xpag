@@ -29,6 +29,7 @@ from collections import OrderedDict
 
 import gym_gfetch
 
+import argparse
 
 def plot_traj(trajs, eval_env, save_dir, it=0):
     fig = plt.figure()
@@ -144,8 +145,15 @@ def visu_success_zones(eval_env, ax):
 
 if (__name__=='__main__'):
 
+    parser = argparse.ArgumentParser(description='Argument for DCIL')
+    parser.add_argument('--demo_path', help='demostration file')
+    parsed_args = parser.parse_args()
+
+    env_args = {}
+    env_args["demo_path"] = str(parsed_args.demo_path)
+
     num_envs = 1  # the number of rollouts in parallel during training
-    env, eval_env, env_info = gym_vec_env('GFetchDCIL-v0', num_envs)
+    env, eval_env, env_info = gym_vec_env('GFetchDCIL-v0', num_envs, env_args)
     print("env_info = ", env_info)
 
     batch_size = 256
@@ -154,7 +162,15 @@ if (__name__=='__main__'):
     max_steps = 100_000
     evaluate_every_x_steps = 1_000
     save_agent_every_x_steps = 100_000
-    save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'test_dcil_fetch')
+
+    now = datetime.now()
+    dt_string = '%s_%s' % (datetime.now().strftime('%Y%m%d'), str(os.getpid()))
+    #save_dir = os.path.join('/gpfswork/rech/kcr/ubj56je', 'results', 'xpag', 'DCIL_XPAG_FETCH', dt_string)
+    save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'DCIL_XPAG_FETCH', dt_string)
+    os.mkdir(save_dir)
+    ## log file for success ratio
+    f_ratio = open(save_dir + "/ratio.txt", "w")
+
     save_episode = True
     plot_projection = None
 
@@ -203,6 +219,7 @@ if (__name__=='__main__'):
                 print("critic loss: ", info_train["critic_loss"])
             if num_rollouts > 0:
                 print("ratio is: ", float(num_success/num_rollouts))
+                f_ratio.write(str(float(num_success/num_rollouts)) + "\n")
                 num_rollouts = 0
                 num_success = 0
 
@@ -274,3 +291,4 @@ if (__name__=='__main__'):
                 buffer.store_done()
             observation = env.reset_done()
             #print("achieved_goal = ", observation["achieved_goal"])
+    f_ratio.close()

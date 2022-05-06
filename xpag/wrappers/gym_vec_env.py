@@ -76,7 +76,7 @@ def gym_vec_env_(env_name, num_envs, env_kwargs=None):
         max_episode_steps = env.max_episode_steps
         env_type = "Gym"
     else:
-        dummy_env = gym.make(env_name)
+        dummy_env = gym.make(env_name, **env_kwargs)
         # We force the env to have either a standard gym time limit (with the max number
         # of steps defined in .spec.max_episode_steps), or that the max number of steps
         # is stored in .max_episode_steps (and in this case we assume that the
@@ -95,7 +95,7 @@ def gym_vec_env_(env_name, num_envs, env_kwargs=None):
                     [
                         (lambda: gym.make(env_name, **env_kwargs))
                         if hasattr(dummy_env, "reset_done")
-                        else (lambda: ResetDoneWrapper(gym.make(env_name)))
+                        else (lambda: ResetDoneWrapper(gym.make(env_name, **env_kwargs)))
                     ]
                     * num_envs,
                     worker=_worker_shared_memory_no_auto_reset,
