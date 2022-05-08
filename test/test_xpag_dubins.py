@@ -161,7 +161,8 @@ def eval_traj(eval_env, agent):
 if (__name__=='__main__'):
 
     parser = argparse.ArgumentParser(description='Argument for DCIL')
-    parser.add_argument('--demo_path', help='demostration file')
+    parser.add_argument('--demo_path', help='path to demonstration file')
+    parser.add_argument('--save_path', help='path to save directory')
     parsed_args = parser.parse_args()
 
     env_args = {}
@@ -180,8 +181,9 @@ if (__name__=='__main__'):
     ## create log dir
     now = datetime.now()
     dt_string = '%s_%s' % (datetime.now().strftime('%Y%m%d'), str(os.getpid()))
-    save_dir = os.path.join('/gpfswork/rech/kcr/ubj56je', 'results', 'xpag', 'DCIL_XPAG_dubins', dt_string)
-    #save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'DCIL_XPAG', dt_string)
+    # save_dir = os.path.join('/gpfswork/rech/kcr/ubj56je', 'results', 'xpag', 'DCIL_XPAG_dubins', dt_string)
+    # save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'DCIL_XPAG_dubins', dt_string)
+    save_dir = str(parsed_args.save_path) + dt_string
     os.mkdir(save_dir)
     ## log file for success ratio
     f_ratio = open(save_dir + "/ratio.txt", "w")
@@ -189,7 +191,7 @@ if (__name__=='__main__'):
     save_episode = True
     plot_projection = None
 
-    agent = SAC(
+    agent = SAC_bonus(
         env_info['observation_dim'] if not env_info['is_goalenv']
         else env_info['observation_dim'] + env_info['desired_goal_dim'],
         env_info['action_dim'],
