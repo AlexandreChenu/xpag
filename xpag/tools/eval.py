@@ -121,7 +121,7 @@ def single_rollout_eval(
         interval_time,
         cumulated_reward,
         None if not env_info["is_goalenv"] else info[0]["is_success"].mean(),
-        # None if not env_info["is_goalenv"] else info["is_success"].mean(),
+        #None if not env_info["is_goalenv"] else info["is_success"].mean(),
         env_info,
         agent,
         save_dir,

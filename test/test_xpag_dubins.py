@@ -180,8 +180,8 @@ if (__name__=='__main__'):
     ## create log dir
     now = datetime.now()
     dt_string = '%s_%s' % (datetime.now().strftime('%Y%m%d'), str(os.getpid()))
-    #save_dir = os.path.join('/gpfswork/rech/kcr/ubj56je', 'results', 'xpag', 'DCIL_no_bonus_overshoot', dt_string)
-    save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'DCIL_XPAG', dt_string)
+    save_dir = os.path.join('/gpfswork/rech/kcr/ubj56je', 'results', 'xpag', 'DCIL_XPAG_dubins', dt_string)
+    #save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'DCIL_XPAG', dt_string)
     os.mkdir(save_dir)
     ## log file for success ratio
     f_ratio = open(save_dir + "/ratio.txt", "w")

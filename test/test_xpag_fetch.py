@@ -4,6 +4,12 @@ import os
 import jax
 import flax
 
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.5"
+
+import jax
+
+print(jax.lib.xla_bridge.get_backend().platform)
+
 import xpag
 from xpag.wrappers import gym_vec_env
 from xpag.buffers import DefaultEpisodicBuffer
@@ -29,6 +35,7 @@ from collections import OrderedDict
 
 import gym_gfetch
 
+from datetime import datetime
 import argparse
 
 def plot_traj(trajs, eval_env, save_dir, it=0):
@@ -159,14 +166,14 @@ if (__name__=='__main__'):
     batch_size = 256
     gd_steps_per_step = 1
     start_training_after_x_steps = 2_500
-    max_steps = 100_000
+    max_steps = 200_000
     evaluate_every_x_steps = 1_000
     save_agent_every_x_steps = 100_000
 
     now = datetime.now()
     dt_string = '%s_%s' % (datetime.now().strftime('%Y%m%d'), str(os.getpid()))
-    #save_dir = os.path.join('/gpfswork/rech/kcr/ubj56je', 'results', 'xpag', 'DCIL_XPAG_FETCH', dt_string)
-    save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'DCIL_XPAG_FETCH', dt_string)
+    save_dir = os.path.join('/gpfswork/rech/kcr/ubj56je', 'results', 'xpag', 'DCIL_XPAG_fetch', dt_string)
+    #save_dir = os.path.join(os.path.expanduser('~'), 'results', 'xpag', 'DCIL_XPAG_FETCH', dt_string)
     os.mkdir(save_dir)
     ## log file for success ratio
     f_ratio = open(save_dir + "/ratio.txt", "w")
