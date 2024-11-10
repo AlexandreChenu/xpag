@@ -1,101 +1,111 @@
-# Copyright 2022 Nicolas Perrin-Gilbert.
+# Copyright 2022-2023, CNRS.
 #
 # Licensed under the BSD 3-Clause License.
 
 from enum import Enum
-from typing import Tuple, Union, Dict
-import torch
+from typing import Tuple, Union, Dict, Any
 import numpy as np
-from jaxlib.xla_extension import DeviceArray
+import jax
 import jax.numpy as jnp
+from gymnasium import spaces
 
 
 class DataType(Enum):
-    TORCH_CPU = "data represented as torch tensors on CPU"
-    TORCH_CUDA = "data represented as torch tensors on GPU"
     NUMPY = "data represented as numpy arrays"
-    JAX = "data represented as jax DeviceArrays"
+    JAX = "data represented as jax.numpy arrays"
+
+
+def get_datatype(x: Union[np.ndarray, jnp.ndarray]) -> DataType:
+    if isinstance(x, jnp.ndarray):
+        return DataType.JAX
+    elif isinstance(x, np.ndarray):
+        return DataType.NUMPY
+    else:
+        raise TypeError(f"{type(x)} not handled.")
+
+
+def datatype_convert(
+    x: Union[np.ndarray, jnp.ndarray, list, float],
+    datatype: Union[DataType, None] = DataType.NUMPY,
+) -> Union[np.ndarray, jnp.ndarray]:
+    if datatype is None:
+        return x
+    elif datatype == DataType.NUMPY:
+        if isinstance(x, np.ndarray):
+            return x
+        else:
+            return np.array(x)
+    elif datatype == DataType.JAX:
+        if isinstance(x, jnp.ndarray):
+            return x
+        else:
+            return jnp.array(x)
 
 
 def reshape(
-    x: Union[torch.Tensor, np.ndarray, DeviceArray, list, float],
+    x: Union[np.ndarray, jnp.ndarray, list, float],
     shape: Tuple[int, ...],
-) -> Union[torch.Tensor, np.ndarray, DeviceArray]:
-    if torch.is_tensor(x) or type(x) == np.ndarray or type(x) == DeviceArray:
+) -> Union[np.ndarray, jnp.ndarray]:
+    if isinstance(x, np.ndarray) or isinstance(x, jnp.ndarray):
         return x.reshape(shape)
     else:
         return np.array(x).reshape(shape)
 
 
 def hstack(
-    x: Union[torch.Tensor, np.ndarray, DeviceArray],
-    y: Union[torch.Tensor, np.ndarray, DeviceArray],
-) -> Union[torch.Tensor, np.ndarray, DeviceArray]:
-    if torch.is_tensor(x) and torch.is_tensor(y):
-        return torch.hstack((x, y))
-    elif type(x) == DeviceArray and type(y) == DeviceArray:
+    x: Union[np.ndarray, jnp.ndarray],
+    y: Union[np.ndarray, jnp.ndarray],
+) -> Union[np.ndarray, jnp.ndarray]:
+    if isinstance(x, jnp.ndarray) and isinstance(y, jnp.ndarray):
         return jnp.hstack((x, y))
-    else:
+    elif isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
         return np.hstack((x, y))
+    else:
+        raise TypeError("Incorrect or non-matching input types.")
+
+
+def logical_or(
+    x: Union[np.ndarray, jnp.ndarray],
+    y: Union[np.ndarray, jnp.ndarray],
+) -> Union[np.ndarray, jnp.ndarray]:
+    if isinstance(x, jnp.ndarray) and isinstance(y, jnp.ndarray):
+        return jnp.logical_or(x, y)
+    elif isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
+        return np.logical_or(x, y)
+    else:
+        raise TypeError("Incorrect or non-matching input types.")
 
 
 def maximum(
-    x: Union[torch.Tensor, np.ndarray, DeviceArray],
-    y: Union[torch.Tensor, np.ndarray, DeviceArray],
-) -> Union[torch.Tensor, np.ndarray, DeviceArray]:
-    if torch.is_tensor(x) and torch.is_tensor(y):
-        return torch.maximum(x, y)
-    elif type(x) == DeviceArray and type(y) == DeviceArray:
+    x: Union[np.ndarray, jnp.ndarray],
+    y: Union[np.ndarray, jnp.ndarray],
+) -> Union[np.ndarray, jnp.ndarray]:
+    if isinstance(x, jnp.ndarray) and isinstance(y, jnp.ndarray):
         return jnp.maximum(x, y)
-    else:
+    elif isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
         return np.maximum(x, y)
+    else:
+        raise TypeError("Incorrect or non-matching input types.")
 
 
-def squeeze(
-    x: Union[torch.Tensor, np.ndarray, DeviceArray]
-) -> Union[torch.Tensor, np.ndarray, DeviceArray]:
-    if torch.is_tensor(x):
-        return torch.squeeze(x)
-    elif type(x) == DeviceArray:
+def squeeze(x: Union[np.ndarray, jnp.ndarray]) -> Union[np.ndarray, jnp.ndarray]:
+    if isinstance(x, jnp.ndarray):
         return jnp.squeeze(x)
     else:
         return np.squeeze(x)
 
 
-def datatype_convert(
-    x: Union[torch.Tensor, np.ndarray, DeviceArray, list, float],
-    datatype: DataType = DataType.NUMPY,
-) -> Union[torch.Tensor, np.ndarray, DeviceArray]:
-    if datatype == DataType.TORCH_CPU or datatype == DataType.TORCH_CUDA:
-        if torch.is_tensor(x):
-            if datatype == DataType.TORCH_CPU:
-                return x.to(device="cpu")
-            else:
-                return x.to(device="cuda")
-        elif type(x) == DeviceArray:
-            if datatype == DataType.TORCH_CPU:
-                return torch.tensor(np.array(x), device="cpu")
-            else:
-                return torch.tensor(np.array(x), device="cuda")
-        else:
-            if datatype == DataType.TORCH_CPU:
-                return torch.tensor(x, device="cpu")
-            else:
-                return torch.tensor(x, device="cuda")
-    elif datatype == DataType.NUMPY:
-        if torch.is_tensor(x):
-            return x.detach().cpu().numpy()
-        elif type(x) == np.ndarray:
-            return x
-        else:
-            return np.array(x)
-    elif datatype == DataType.JAX:
-        if torch.is_tensor(x):
-            return jnp.array(x.detach().cpu().numpy())
-        elif type(x) == DeviceArray:
-            return x
-        else:
-            return jnp.array(x)
+def where(
+    condition: Any,
+    x: Union[np.ndarray, jnp.ndarray],
+    y: Union[np.ndarray, jnp.ndarray],
+) -> Union[np.ndarray, jnp.ndarray]:
+    if isinstance(x, jnp.ndarray) and isinstance(y, jnp.ndarray):
+        return jnp.where(condition, x, y)
+    elif isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
+        return np.where(condition, x, y)
+    else:
+        raise TypeError("Incorrect or non-matching input types.")
 
 
 def get_env_dimensions(info: dict, is_goalenv: bool, env) -> Dict[str, int]:
@@ -111,6 +121,30 @@ def get_env_dimensions(info: dict, is_goalenv: bool, env) -> Dict[str, int]:
     dims = {}
     if gymvecenv:
         info["action_dim"] = env.single_action_space.shape[-1]
+        if is_goalenv:
+            assert (
+                isinstance(env.single_observation_space["observation"], spaces.box.Box)
+                and isinstance(
+                    env.single_observation_space["achieved_goal"], spaces.box.Box
+                )
+                and isinstance(
+                    env.single_observation_space["desired_goal"], spaces.box.Box
+                )
+                and isinstance(env.single_action_space, spaces.box.Box)
+            ), (
+                'env.single_observation_space["observation"] and '
+                'env.single_observation_space["achieved_goal"] and '
+                'env.single_observation_space["desired_goal"] and '
+                "env.single_action_space must be of type gymnasium.spaces.box.Box"
+            )
+        else:
+            assert isinstance(
+                env.single_observation_space, spaces.box.Box
+            ) and isinstance(env.single_action_space, spaces.box.Box), (
+                "env.single_observation_space and "
+                "env.single_action_space must be of type gymnasium.spaces.box.Box"
+            )
+
         info["observation_dim"] = (
             env.single_observation_space["observation"].shape[-1]
             if is_goalenv
@@ -127,6 +161,26 @@ def get_env_dimensions(info: dict, is_goalenv: bool, env) -> Dict[str, int]:
             else None
         )
     else:
+        if is_goalenv:
+            assert (
+                isinstance(env.observation_space["observation"], spaces.box.Box)
+                and isinstance(env.observation_space["achieved_goal"], spaces.box.Box)
+                and isinstance(env.observation_space["desired_goal"], spaces.box.Box)
+                and isinstance(env.action_space, spaces.box.Box)
+            ), (
+                'env.observation_space["observation"] and '
+                'env.observation_space["achieved_goal"] and '
+                'env.observation_space["desired_goal"] and '
+                "env.action_space must be of type gymnasium.spaces.box.Box"
+            )
+        else:
+            assert isinstance(env.observation_space, spaces.box.Box) and isinstance(
+                env.action_space, spaces.box.Box
+            ), (
+                "env.observation_space and "
+                "env.action_space must be of type gymnasium.spaces.box.Box"
+            )
+
         info["action_dim"] = env.action_space.shape[-1]
         info["observation_dim"] = (
             env.observation_space["observation"].shape[-1]
@@ -140,3 +194,11 @@ def get_env_dimensions(info: dict, is_goalenv: bool, env) -> Dict[str, int]:
             env.observation_space["desired_goal"].shape[-1] if is_goalenv else None
         )
     return dims
+
+
+def tree_sum(tree: Any):
+    elt_list = jax.tree_util.tree_flatten(tree)[0]
+    cumsum = 0.0
+    for elt in elt_list:
+        cumsum += elt.sum()
+    return cumsum

@@ -1,12 +1,11 @@
-# Copyright 2022 Nicolas Perrin-Gilbert.
+# Copyright 2022-2023, CNRS.
 #
 # Licensed under the BSD 3-Clause License.
 
 from abc import ABC, abstractmethod
-from typing import Union, Dict
-import torch
-from jaxlib.xla_extension import DeviceArray
+from typing import Union, Dict, Tuple
 import numpy as np
+import jax.numpy as jnp
 
 
 class Agent(ABC):
@@ -25,16 +24,16 @@ class Agent(ABC):
     @abstractmethod
     def train_on_batch(
         self,
-        batch: Dict[str, Union[torch.Tensor, np.ndarray, DeviceArray]],
+        batch: Dict[str, Union[np.ndarray, jnp.ndarray]],
     ) -> dict:
         pass
 
     @abstractmethod
     def select_action(
         self,
-        observation: Union[torch.Tensor, np.ndarray, DeviceArray],
-        deterministic=True,
-    ) -> Union[torch.Tensor, np.ndarray, DeviceArray]:
+        observation: Union[np.ndarray, jnp.ndarray],
+        eval_mode=False,
+    ) -> Union[np.ndarray, jnp.ndarray, Tuple[Union[np.ndarray, jnp.ndarray], Dict]]:
         pass
 
     @abstractmethod

@@ -1,6 +1,2 @@
-from xpag.agents.agent import (
-    Agent,
-)
-from xpag.agents.sac.sac import SAC
-from xpag.agents.sac.sac_bonus import SAC_bonus
-from xpag.agents.td3.td3 import TD3
+from xpag.agents.agent import Agent
+from xpag.agents.all_agents import SAC, TD3, TQC, SDQN, SDQNSetter

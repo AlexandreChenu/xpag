@@ -1,29 +1,21 @@
-# Copyright 2022 Nicolas Perrin-Gilbert.
+# Copyright 2022-2023, CNRS.
 #
 # Licensed under the BSD 3-Clause License.
 
 import sys
 import inspect
+from typing import Callable
 import numpy as np
-import gym
-from gym.vector.utils import (
+import gymnasium as gym
+from gymnasium.vector.utils import (
     write_to_shared_memory,
     concatenate,
-    create_empty_array
+    create_empty_array,
 )
-from gym.vector import VectorEnv, AsyncVectorEnv
-from xpag.wrappers.reset_done_sync_vector_env import SyncVectorEnv
+from gymnasium.spaces import Box
+from gymnasium.vector import VectorEnv, AsyncVectorEnv, VectorEnvWrapper, SyncVectorEnv
 from xpag.wrappers.reset_done import ResetDoneWrapper
 from xpag.tools.utils import get_env_dimensions
-
-from gym import envs
-
-from collections import OrderedDict
-from typing import Tuple, Union, Optional
-import copy
-
-
-import gym_gfetch
 
 
 def check_goalenv(env) -> bool:
@@ -46,22 +38,32 @@ def check_goalenv(env) -> bool:
     return True
 
 
-def gym_vec_env_(env_name, num_envs, env_kwargs=None):
+def gym_vec_env_(env_name, num_envs, wrap_function=None, **gym_kwargs):
+    if wrap_function is None:
+
+        def wrap_function(x):
+            return x
+
     if "num_envs" in inspect.signature(
-        gym.envs.registration.load(
-            gym.envs.registry.spec(env_name).entry_point
-        ).__init__
+        gym.envs.registration.load_env_creator(gym.spec(env_name).entry_point).__init__
     ).parameters and hasattr(
-        gym.envs.registration.load(gym.envs.registry.spec(env_name).entry_point),
+        gym.envs.registration.load_env_creator(gym.spec(env_name).entry_point),
         "reset_done",
     ):
         # no need to create a VecEnv and wrap it if the env accepts 'num_envs' as an
-        # argument at __init__ and has a reset_done() method.
-        env = gym.make(env_name, num_envs=num_envs, **env_kwargs)
+        # argument at __init__ and has a reset_done() method. In this case, we trust
+        # the environment to properly handle parallel rollouts.
+
+        env = wrap_function(
+            gym.make(
+                env_name, num_envs=num_envs, **gym_kwargs
+            ).unwrapped  # removing gymnasium wrappers
+        )
+
         # We force the environment to have a time limit, but
         # env.spec.max_episode_steps cannot exist as it would automatically trigger
-        # the TimeLimit wrapper of gym, which does not handle batch envs. We require
-        # max_episode_steps to be stored as an attribute of env:
+        # the TimeLimit wrapper of gymnasium, which does not handle batch envs.
+        # We require max_episode_steps to be stored as an attribute of env:
         assert (
             (
                 not hasattr(env.spec, "max_episode_steps")
@@ -71,64 +73,70 @@ def gym_vec_env_(env_name, num_envs, env_kwargs=None):
             and env.max_episode_steps is not None
         ), (
             "Trying to create a batch environment. env.max_episode_steps must exist, "
-            "and env.spec.max_episode_steps must be None."
+            "and env.spec.max_episode_steps must not (or be None)."
         )
-        max_episode_steps = env.max_episode_steps
         env_type = "Gym"
     else:
-        dummy_env = gym.make(env_name, **env_kwargs)
-        # We force the env to have either a standard gym time limit (with the max number
-        # of steps defined in .spec.max_episode_steps), or that the max number of steps
-        # is stored in .max_episode_steps (and in this case we assume that the
-        # environment appropriately prevents episodes from exceeding max_episode_steps
-        # steps).
+        dummy_env = gym.make(env_name, **gym_kwargs)
+        # We force the env to either have a standard gymnasium time limit (with the
+        # max number of steps defined in .spec.max_episode_steps), or the max number of
+        # steps defined in .max_episode_steps (and in this case we trust the environment
+        # to appropriately prevent episodes from exceeding max_episode_steps steps).
         assert (
             hasattr(dummy_env.spec, "max_episode_steps")
             and dummy_env.spec.max_episode_steps is not None
         ) or (
             hasattr(dummy_env, "max_episode_steps")
             and dummy_env.max_episode_steps is not None
-        ), "Only allowing gym envs with time limit (spec.max_episode_steps)."
-        env = NormalizationWrapper(
-            ResetDoneVecWrapper(
-                AsyncVectorEnv(
-                    [
-                        (lambda: gym.make(env_name, **env_kwargs))
-                        if hasattr(dummy_env, "reset_done")
-                        else (lambda: ResetDoneWrapper(gym.make(env_name, **env_kwargs)))
-                    ]
-                    * num_envs,
-                    worker=_worker_shared_memory_no_auto_reset,
-                )
-            )
+        ), (
+            "Only allowing gym(nasium) envs with time limit (defined in "
+            ".spec.max_episode_steps or .max_episode_steps)."
         )
-        env._spec = dummy_env.spec
-
-        ## Note (Alex): dummy_env.spec.max_episode_steps may not exist with the new version of assert
-        if hasattr(dummy_env, "max_episode_steps"):
-            max_episode_steps = dummy_env.max_episode_steps
-        else:
+        if (
+            hasattr(dummy_env.spec, "max_episode_steps")
+            and dummy_env.spec.max_episode_steps is not None
+        ):
             max_episode_steps = dummy_env.spec.max_episode_steps
+        else:
+            max_episode_steps = dummy_env.max_episode_steps
         # env_type = "Mujoco" if isinstance(dummy_env.unwrapped, MujocoEnv) else "Gym"
         # To avoid imposing a dependency to mujoco, we simply guess that the
-        # environment is a mujoco environment when it has the 'init_qpos', 'init_qvel'
-        # and 'state_vector' attributes:
+        # environment is a mujoco environment when it has the 'init_qpos', 'init_qvel',
+        # 'state_vector', 'do_simulation' and 'get_body_com' attributes:
         env_type = (
             "Mujoco"
             if hasattr(dummy_env.unwrapped, "init_qpos")
             and hasattr(dummy_env.unwrapped, "init_qvel")
             and hasattr(dummy_env.unwrapped, "state_vector")
+            and hasattr(dummy_env.unwrapped, "do_simulation")
+            and hasattr(dummy_env.unwrapped, "get_body_com")
             else "Gym"
         )
         # The 'init_qpos' and 'state_vector' attributes are the one required to
         # save mujoco episodes (cf. class SaveEpisode in xpag/tools/eval.py).
+        env = wrap_function(
+            ResetDoneVecWrapper(
+                SyncVectorEnv(
+                    [
+                        (lambda: gym.make(env_name, **gym_kwargs))
+                        if hasattr(dummy_env, "reset_done")
+                        else (
+                            lambda: ResetDoneWrapper(gym.make(env_name, **gym_kwargs))
+                        )
+                    ]
+                    * num_envs
+                ),
+                max_episode_steps,
+            )
+        )
+
     is_goalenv = check_goalenv(env)
     env_info = {
         "env_type": env_type,
         "name": env_name,
         "is_goalenv": is_goalenv,
         "num_envs": num_envs,
-        "max_episode_steps": max_episode_steps,
+        "max_episode_steps": env.max_episode_steps,
         "action_space": env.action_space,
         "single_action_space": env.single_action_space,
     }
@@ -136,177 +144,98 @@ def gym_vec_env_(env_name, num_envs, env_kwargs=None):
     return env, env_info
 
 
-def gym_vec_env(env_name, num_envs, env_kwargs=None):
-    env, env_info = gym_vec_env_(env_name, num_envs, env_kwargs)
-    eval_env, _ = gym_vec_env_(env_name, 1, env_kwargs)
+def gym_vec_env(env_name: str, num_envs: int, wrap_function: Callable = None, **kwargs):
+    env, env_info = gym_vec_env_(env_name, num_envs, wrap_function, **kwargs)
+    eval_env, _ = gym_vec_env_(env_name, 1, wrap_function, **kwargs)
     return env, eval_env, env_info
 
 
-# class ResetDoneVecWrapper(gym.Wrapper):
-#     def __init__(self, env: VectorEnv):
-#         super().__init__(env)
-#
-#     def reset(self, **kwargs):
-#         return self.env.reset(**kwargs)
-#
-#     def reset_done(self, **kwargs):
-#         return np.array(self.env.call("reset_done", **kwargs))
-#
-#     def step(self, action):
-#         obs, reward, done, info_ = self.env.step(action)
-#         info = {
-#             "info_tuple": info_,
-#             "truncation": np.array(
-#                 [
-#                     [elt["TimeLimit.truncated"] if "TimeLimit.truncated" in elt else 0]
-#                     for elt in info_
-#                 ]
-#             ).reshape((self.env.num_envs, -1)),
-#         }
-#
-#         return (
-#             obs.reshape((self.env.num_envs, -1)),
-#             reward.reshape((self.env.num_envs, -1)),
-#             done.reshape((self.env.num_envs, -1)),
-#             info,
-#         )
-
-class ResetDoneVecWrapper(gym.Wrapper):
-    def __init__(self, env: VectorEnv):
+class ResetDoneVecWrapper(VectorEnvWrapper):
+    def __init__(self, env: VectorEnv, max_episode_steps: int):
         super().__init__(env)
+        self.max_episode_steps = max_episode_steps
 
     def reset(self, **kwargs):
-        return self.env.reset(**kwargs)
+        obs, info_ = self.env.reset(**kwargs)
+        return {key: obs[key].reshape((self.env.num_envs, -1)) for key in obs.keys()}, {"info_tuple": tuple(info_)}
 
-    ## Note (Alex): pass result through concatenate function to obtain a OrderedDict as output
-    def reset_done(self, **kwargs):
-        results = self.env.call("reset_done", **kwargs)
+    def reset_done(self, *args, **kwargs):
+        results, info_ = tuple(zip(*self.env.call("reset_done", *args, **kwargs)))
         observations = create_empty_array(
             self.env.single_observation_space, n=self.num_envs, fn=np.empty
         )
-        return concatenate(self.env.single_observation_space, results, observations)
+        # TODO take args into account
+        for env_indx, env in enumerate(self.env.envs): 
+            if args[env_indx][0]:
+                env._elapsed_steps = 0
 
-    # def reset_done(self, **kwargs):
-    #     return self.env.reset_done(**kwargs)
-
-    def step(self, action):
-        obs, reward, done, info = self.env.step(action)
-        # info = {
-        #     "info_tuple": info_,
-        #     "truncation": np.array(
-        #         [
-        #             [elt["TimeLimit.truncated"] if "TimeLimit.truncated" in elt else 0]
-        #             for elt in info_
-        #         ]
-        #     ).reshape((self.env.num_envs, -1)),
-        # }
-
+        info = {"info_tuple": tuple(info_)}
         return (
-            obs,
-            reward,
-            done,
+            concatenate(self.env.single_observation_space, results, observations),
             info,
         )
 
-
-class RunningMeanStd:
-    def __init__(self, epsilon: float = 1e-4, shape: Tuple[int, ...] = ()):
-        """
-        Calulates the running mean and std of a data stream
-        https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
-        :param epsilon: helps with arithmetic issues
-        :param shape: the shape of the data stream's output
-        """
-        self.mean = np.zeros(shape, np.float64)
-        self.var = np.ones(shape, np.float64)
-        self.count = epsilon
-
-    def update(self, arr: np.ndarray) -> None:
-        batch_mean = np.mean(arr, axis=0)
-        batch_var = np.var(arr, axis=0)
-        batch_count = arr.shape[0]
-        self.update_from_moments(batch_mean, batch_var, batch_count)
-
-    def update_from_moments(self, batch_mean: np.ndarray, batch_var: np.ndarray, batch_count: Union[int, float]) -> None:
-        delta = batch_mean - self.mean
-        tot_count = self.count + batch_count
-
-        new_mean = self.mean + delta * batch_count / tot_count
-        m_a = self.var * self.count
-        m_b = batch_var * batch_count
-        m_2 = m_a + m_b + np.square(delta) * self.count * batch_count / (self.count + batch_count)
-        new_var = m_2 / (self.count + batch_count)
-
-        new_count = batch_count + self.count
-
-        self.mean = new_mean
-        self.var = new_var
-        self.count = new_count
-
-
-class NormalizationWrapper(ResetDoneVecWrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        ## init observation running mean and std
-        observation = self.reset()
-        self.obs_rms = {key: RunningMeanStd(shape=observation[key].shape) for key in observation.keys()}
-        for key in self.obs_rms.keys():
-            self.obs_rms[key].update(observation[key])
-        self.epsilon = 1e-8
-        self.min_obs = -10.
-        self.max_obs = 10.
-
-        self.do_normalize = True
-
-    def step(self, action):
-        obs, reward, done, info = self._step(action)
-
-        ## update RMS
-        for key in self.obs_rms.keys():
-            self.obs_rms[key].update(obs[key])
-        # print("mean achieved goal = ", self.obs_rms["achieved_goal"].mean)
-
-        return (
-            obs,
-            reward,
-            done,
-            info,
+    # TODO trouver une solution plus propre que l'indice 0
+    def step(self, *args, **kwargs):
+        # obs, reward, terminated, truncated, info_ = self.env.step(action)
+        obs_results, reward_result, terminated_result, truncated_result, info_ = tuple(zip(*self.env.call("step", *args, **kwargs)))
+        info_[0]["is_success"] = (
+            info_[0]["is_success"]
+            if "is_success" in info_[0]
+            else np.array([False] * self.num_envs).reshape((self.num_envs, 1))
         )
 
-    def _step(self, action):
-        obs, reward, done, info = self.env.step(action)
+        empty_obs =  create_empty_array(
+            self.env.single_observation_space, n=self.num_envs, fn=np.empty
+        )
+        observation = concatenate(self.env.single_observation_space, obs_results, empty_obs)
+        
+        empty_reward = create_empty_array(
+            Box(0, 1, dtype=np.float64), n=self.num_envs, fn=np.empty
+        )
+        reward = concatenate(Box(0, 1, dtype=np.float64), reward_result, empty_reward)
 
+        empty_terminated = create_empty_array(
+            Box(0, 1, dtype=np.float64), n=self.num_envs, fn=np.empty
+        )
+        terminated = concatenate(Box(0, 1, dtype=np.float64), terminated_result, empty_terminated)
+
+        empty_truncated = create_empty_array(
+            Box(0, 1, dtype=np.float64), n=self.num_envs, fn=np.empty
+        )
+        truncated = concatenate(Box(0, 1, dtype=np.float64), truncated_result, empty_truncated)
+
+        # return (
+        #     {key: obs[0][key].reshape((self.env.num_envs, -1)) for key in obs[0].keys()},
+        #     reward[0].reshape((self.env.num_envs, -1)),
+        #     terminated[0].reshape((self.env.num_envs, -1)),
+        #     np.array(truncated).reshape((self.env.num_envs, -1)),
+        #     info_[0],
+        # )
         return (
-            obs,
+            observation,
             reward,
-            done,
-            info,
+            terminated,
+            truncated,
+            info_[0],
         )
 
-    def _normalize(self, obs, rms):
-        return np.clip((obs - rms.mean) / np.sqrt(rms.var + self.epsilon), self.min_obs, self.max_obs)
 
-    def _unnormalize(self, norm_obs, rms):
-        return norm_obs * np.sqrt(rms.var + self.epsilon) + rms.mean
-
-    def normalize(self, obs):
-        norm_obs = copy.deepcopy(obs)
-        for key in obs.keys():
-            norm_obs[key] = self._normalize(norm_obs[key], self.obs_rms[key])
-        return norm_obs
-
-    def unormalize(self, norm_obs):
-        obs = copy.deepcopy(norm_obs)
-        for key in obs.keys():
-            obs[key] = self._unnormalize(obs[key], self.obs_rms[key])
-        return norm_obs
+    ## TODO il faut changer le wrapper ResetDoneVecWrapper => il faut implémenter notre propre gymvecenv
+    def compute_reward(self, *args, **kwargs):
+        results = np.array(tuple(zip(*self.env.call("compute_reward", *args, **kwargs))))
+        return results 
+    
+    def project_to_goal_space(self, *args, **kwargs):
+        result = np.array(tuple(zip(*self.env.call("project_to_goal_space", *args, **kwargs))))
+        return result
 
 def _worker_shared_memory_no_auto_reset(
     index, env_fn, pipe, parent_pipe, shared_memory, error_queue
 ):
     """
-    This function is derived from _worker_shared_memory() in gym. See:
-    https://github.com/openai/gym/blob/master/gym/vector/async_vector_env.py
+    This function is derived from _worker_shared_memory() in gymnasium. See:
+    https://github.com/Farama-Foundation/Gymnasium/blob/main/gymnasium/vector/async_vector_env.py
     """
     assert shared_memory is not None
     env = env_fn()
@@ -316,30 +245,22 @@ def _worker_shared_memory_no_auto_reset(
         while True:
             command, data = pipe.recv()
             if command == "reset":
-                if "return_info" in data and data["return_info"] is True:
-                    observation, info = env.reset(**data)
-                    write_to_shared_memory(
-                        observation_space, index, observation, shared_memory
-                    )
-                    pipe.send(((None, info), True))
-                else:
-                    observation = env.reset(**data)
-                    write_to_shared_memory(
-                        observation_space, index, observation, shared_memory
-                    )
-                    pipe.send((None, True))
-
-
-            elif command == "step":
-                observation, reward, done, info = env.step(data)
-                # NO AUTOMATIC RESET
-                # if done:
-                #     info["terminal_observation"] = observation
-                #     observation = env.reset()
+                observation, info = env.reset(**data)
                 write_to_shared_memory(
                     observation_space, index, observation, shared_memory
                 )
-                pipe.send(((None, reward, done, info), True))
+                pipe.send(((None, info), True))
+            elif command == "step":
+                observation, reward, terminated, truncated, info = env.step(data)
+                # NO AUTOMATIC RESET
+                # if terminated or truncated:
+                #     old_observation = observation
+                #     observation, info = env.reset()
+                #     info["final_observation"] = old_observation
+                write_to_shared_memory(
+                    observation_space, index, observation, shared_memory
+                )
+                pipe.send(((None, reward, terminated, truncated, info), True))
             # elif command == "seed":
             #     env.seed(data)
             #     pipe.send((None, True))
@@ -354,10 +275,13 @@ def _worker_shared_memory_no_auto_reset(
                         f"`_call`. Use `{name}` directly instead."
                     )
                 function = getattr(env, name)
-                if callable(function):
-                    pipe.send((function(*args, **kwargs), True))
+                if name == "reset_done":
+                    pipe.send((function(index, *args, **kwargs), True))
                 else:
-                    pipe.send((function, True))
+                    if callable(function):
+                        pipe.send((function(*args, **kwargs), True))
+                    else:
+                        pipe.send((function, True))
             elif command == "_setattr":
                 name, value = data
                 setattr(env, name, value)
